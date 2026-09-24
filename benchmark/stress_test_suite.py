@@ -145,40 +145,51 @@ class StressAuditor:
             group_id=f"stress-auditor-{uuid.uuid4().hex[:8]}",
             consumer_timeout_ms=1000
         )
-        while self.running.is_set():
-            batch = consumer.poll(timeout_ms=250)
-            t_now = time.time()
-            for tp, records in batch.items():
-                topic_name = tp.topic
-                for r in records:
-                    try:
-                        val = json.loads(r.value.decode('utf-8'))
-                        op = val.get('operation')
-                        after = val.get('after') or {}
-                        before = val.get('before') or {}
+        try:
+            while self.running.is_set():
+                try:
+                    batch = consumer.poll(timeout_ms=250)
+                except Exception:
+                    time.sleep(0.1)
+                    continue
 
-                        # Tenta encontrar a chave primária nos dados
-                        found_key = None
-                        for k, v in after.items():
-                            candidate = f"{topic_name}:{v}"
-                            if candidate in self.sent_events:
-                                found_key = candidate
-                                break
-                        if not found_key:
-                            for k, v in before.items():
+                t_now = time.time()
+                for tp, records in batch.items():
+                    topic_name = tp.topic
+                    for r in records:
+                        try:
+                            val = json.loads(r.value.decode('utf-8'))
+                            op = val.get('operation')
+                            after = val.get('after') or {}
+                            before = val.get('before') or {}
+
+                            found_key = None
+                            for k, v in after.items():
                                 candidate = f"{topic_name}:{v}"
                                 if candidate in self.sent_events:
                                     found_key = candidate
                                     break
+                            if not found_key:
+                                for k, v in before.items():
+                                    candidate = f"{topic_name}:{v}"
+                                    if candidate in self.sent_events:
+                                        found_key = candidate
+                                        break
 
-                        if found_key and found_key in self.sent_events:
-                            t0 = self.sent_events[found_key]
-                            lat_ms = (t_now - t0) * 1000.0
-                            if lat_ms >= 0:
-                                self.latencies[topic_name].append(lat_ms)
-                    except Exception:
-                        pass
-        consumer.close()
+                            if found_key and found_key in self.sent_events:
+                                t0 = self.sent_events[found_key]
+                                lat_ms = (t_now - t0) * 1000.0
+                                if lat_ms >= 0:
+                                    self.latencies[topic_name].append(lat_ms)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        finally:
+            try:
+                consumer.close()
+            except Exception:
+                pass
 
     def stop(self):
         self.running.clear()
@@ -218,7 +229,6 @@ def inject_postgres(target, num_ops, auditor, start_id):
                         (rec_id, 3500.0 + i, 'ATIVO'))
         conn.commit()
 
-        # Update parcial a cada 3 inserts
         if i % 3 == 0:
             t0_up = time.time()
             auditor.record_sent(f"{topic}:{rec_id}", t0_up)
@@ -312,7 +322,7 @@ def inject_oracle(target, num_ops, auditor, start_id):
 
 def run_stress_test(ops_per_target=1000):
     print("=" * 80)
-    print(f"🚀 INICIANDO TESTE DE ESTRESSE MASSIVO MULTI-BANCO: 15 BANCOS SIMULTÂNEOS")
+    print(f"INICIANDO TESTE DE ESTRESSE MASSIVO MULTI-BANCO: 15 BANCOS SIMULTÂNEOS")
     print(f"   Operações por conector: {ops_per_target} (Total ~{ops_per_target * 15 * 1.33:.0f} DMLs)")
     print(f"   Início: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 80)
@@ -336,20 +346,20 @@ def run_stress_test(ops_per_target=1000):
         threads.append(th)
         th.start()
 
-    print(f"⚡ Todas as 15 threads de injeção iniciadas! Aguardando processamento concorrente...")
+    print(f"Todas as 15 threads de injeção iniciadas! Aguardando processamento concorrente...")
     for th in threads:
         th.join()
 
     t_injected = time.time()
-    print(f"✅ Injeção transacional finalizada em {t_injected - t_start:.2f} segundos!")
-    print(f"⏳ Aguardando drenagem dos streams pelos conectores do RootL CDC Publisher...")
+    print(f"Injeção transacional finalizada em {t_injected - t_start:.2f} segundos!")
+    print(f"Aguardando drenagem dos streams pelos conectores do RootL CDC Publisher...")
     time.sleep(12)  # Coleta de cauda nos tópicos
 
     auditor.stop()
     t_total = time.time() - t_start
 
     print("\n" + "=" * 80)
-    print("📊 RESULTADOS CONSOLIDADOS POR BANCO DE DADOS (15 CONECTORES)")
+    print("RESULTADOS CONSOLIDADOS POR BANCO DE DADOS (15 CONECTORES)")
     print("=" * 80)
 
     report_data = []

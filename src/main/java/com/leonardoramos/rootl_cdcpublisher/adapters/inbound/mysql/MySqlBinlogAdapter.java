@@ -44,6 +44,7 @@ public class MySqlBinlogAdapter implements ChangeLogConnector {
 
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final Map<Long, String> tableMap = new HashMap<>();
+    private volatile String currentTransactionId = null;
 
     public MySqlBinlogAdapter() {}
 
@@ -258,7 +259,41 @@ public class MySqlBinlogAdapter implements ChangeLogConnector {
         String binlogPos = String.valueOf(header.getPosition());
         String offsetCoordinates = binlogFile + ":" + binlogPos;
 
-        String txId = "tx-" + header.getServerId() + "-" + header.getTimestamp();
+        if (data instanceof GtidEventData gtidData) {
+            this.currentTransactionId = "tx-gtid-" + gtidData.getGtid();
+            ChangeEvent beginEvent = new ChangeEvent(UUID.randomUUID(), OperationType.BEGIN, Instant.now(),
+                    createMetadata(database, "system", "transaction", this.currentTransactionId, offsetCoordinates), null, null);
+            useCase.process(beginEvent);
+            return;
+        }
+
+        if (data instanceof QueryEventData queryData) {
+            String query = queryData.getSql().trim().toUpperCase();
+            if ("BEGIN".equals(query)) {
+                this.currentTransactionId = "tx-" + header.getServerId() + "-" + header.getPosition();
+                ChangeEvent beginEvent = new ChangeEvent(UUID.randomUUID(), OperationType.BEGIN, Instant.now(),
+                        createMetadata(database, "system", "transaction", this.currentTransactionId, offsetCoordinates), null, null);
+                useCase.process(beginEvent);
+                return;
+            } else if ("COMMIT".equals(query)) {
+                log.trace("Sinal de Query(COMMIT) recebido no MySQL.");
+                String txToCommit = (this.currentTransactionId != null) ? this.currentTransactionId : ("tx-" + header.getServerId() + "-" + header.getPosition());
+                ChangeEvent commitEvent = new ChangeEvent(UUID.randomUUID(), OperationType.COMMIT, Instant.now(),
+                        createMetadata(database, "system", "transaction", txToCommit, offsetCoordinates), null, null);
+                useCase.process(commitEvent);
+                this.currentTransactionId = null;
+                return;
+            } else if ("ROLLBACK".equals(query)) {
+                log.trace("Sinal de Query(ROLLBACK) recebido no MySQL.");
+                if (this.currentTransactionId != null) {
+                    ChangeEvent rollbackEvent = new ChangeEvent(UUID.randomUUID(), OperationType.ROLLBACK, Instant.now(),
+                            createMetadata(database, "system", "transaction", this.currentTransactionId, offsetCoordinates), null, null);
+                    useCase.process(rollbackEvent);
+                    this.currentTransactionId = null;
+                }
+                return;
+            }
+        }
 
         if (data instanceof TableMapEventData tableData) {
             String db = tableData.getDatabase();
@@ -266,38 +301,38 @@ public class MySqlBinlogAdapter implements ChangeLogConnector {
             log.trace("Mapeando Tabela {}: {}.{}", tableData.getTableId(), db, table);
             tableMap.put(tableData.getTableId(), db + "." + table);
 
-            ChangeEvent beginEvent = new ChangeEvent(UUID.randomUUID(), OperationType.BEGIN, Instant.now(),
-                    createMetadata(db, "system", "transaction", txId, offsetCoordinates), null, null);
-            useCase.process(beginEvent);
+            if (this.currentTransactionId == null) {
+                this.currentTransactionId = "tx-" + header.getServerId() + "-" + header.getPosition();
+                ChangeEvent beginEvent = new ChangeEvent(UUID.randomUUID(), OperationType.BEGIN, Instant.now(),
+                        createMetadata(db, "system", "transaction", this.currentTransactionId, offsetCoordinates), null, null);
+                useCase.process(beginEvent);
+            }
+            return;
         }
 
-        else if (data instanceof WriteRowsEventData writeData) {
-            processRowEvent(writeData.getTableId(), OperationType.INSERT, null, writeData.getRows(), txId, offsetCoordinates);
+        if (this.currentTransactionId == null) {
+            this.currentTransactionId = "tx-" + header.getServerId() + "-" + header.getPosition();
+        }
+
+        if (data instanceof WriteRowsEventData writeData) {
+            processRowEvent(writeData.getTableId(), OperationType.INSERT, null, writeData.getRows(), this.currentTransactionId, offsetCoordinates);
         }
         else if (data instanceof UpdateRowsEventData updateData) {
             for (Map.Entry<Serializable[], Serializable[]> row : updateData.getRows()) {
                 processRowEvent(updateData.getTableId(), OperationType.UPDATE, row.getKey(),
-                        Collections.singletonList(row.getValue()), txId, offsetCoordinates);
+                        Collections.singletonList(row.getValue()), this.currentTransactionId, offsetCoordinates);
             }
         }
         else if (data instanceof DeleteRowsEventData deleteData) {
-            processRowEvent(deleteData.getTableId(), OperationType.DELETE, null, deleteData.getRows(), txId, offsetCoordinates);
+            processRowEvent(deleteData.getTableId(), OperationType.DELETE, null, deleteData.getRows(), this.currentTransactionId, offsetCoordinates);
         }
-
         else if (data instanceof XidEventData) {
             log.trace("Sinal de XID (COMMIT) recebido no MySQL.");
+            String txToCommit = (this.currentTransactionId != null) ? this.currentTransactionId : ("tx-" + header.getServerId() + "-" + header.getPosition());
             ChangeEvent commitEvent = new ChangeEvent(UUID.randomUUID(), OperationType.COMMIT, Instant.now(),
-                    createMetadata(database, "system", "transaction", txId, offsetCoordinates), null, null);
+                    createMetadata(database, "system", "transaction", txToCommit, offsetCoordinates), null, null);
             useCase.process(commitEvent);
-        }
-        else if (data instanceof QueryEventData queryData) {
-            String query = queryData.getSql().trim().toUpperCase();
-            if ("COMMIT".equals(query)) {
-                log.trace("Sinal de Query(COMMIT) recebido no MySQL.");
-                ChangeEvent commitEvent = new ChangeEvent(UUID.randomUUID(), OperationType.COMMIT, Instant.now(),
-                        createMetadata(database, "system", "transaction", txId, offsetCoordinates), null, null);
-                useCase.process(commitEvent);
-            }
+            this.currentTransactionId = null;
         }
     }
 

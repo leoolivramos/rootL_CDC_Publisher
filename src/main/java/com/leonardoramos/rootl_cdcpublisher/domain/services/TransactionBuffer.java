@@ -45,7 +45,11 @@ public class TransactionBuffer {
      */
     public List<ChangeEvent> commit(String transactionId) {
         List<ChangeEvent> events = buffer.remove(transactionId);
-        return events != null ? events : List.of();
+        if (events == null) {
+            log.trace("Nenhum evento retido no buffer para a transação confirmada (COMMIT): {}", transactionId);
+            return List.of();
+        }
+        return events;
     }
 
     /**

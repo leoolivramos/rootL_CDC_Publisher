@@ -84,6 +84,7 @@ public class ProcessChangeEventUseCase {
             case BEGIN -> log.debug("Iniciando buffer para transação: {}", txId);
             case INSERT, UPDATE, DELETE, READ -> transactionBuffer.addEvent(txId, event);
             case COMMIT -> flushTransaction(txId, event.source().offsetCoordinates());
+            case ROLLBACK -> transactionBuffer.rollback(txId);
         }
     }
 

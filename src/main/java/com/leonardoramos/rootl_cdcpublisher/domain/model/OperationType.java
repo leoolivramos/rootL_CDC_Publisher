@@ -15,5 +15,6 @@ public enum OperationType {
     DELETE,
     BEGIN,
     COMMIT,
-    READ
+    READ,
+    ROLLBACK
 }
