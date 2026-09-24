@@ -21,7 +21,7 @@ O **Root L CDC Publisher** resolve isso:
 
 O projeto utiliza **Arquitetura Hexagonal (Ports and Adapters)**, isolando completamente a lógica de processamento (CdcEngine) das tecnologias de infraestrutura.
 
-1. **Engine Multi-Tenant:** A aplicação varre a pasta /connectors, carrega os arquivos .json e inicializa cada conector em sua própria *Thread* isolada.
+1. **Engine Multi-Tenant:** A aplicação varre a pasta `/connectors`, carrega os arquivos `.json` e inicializa cada conector em sua própria *Thread* isolada.
 2. **Snapshot (Carga Inicial):** Lê as tabelas publicadas e marca o ponteiro base.
 3. **Replicação Lógica (Stream):** Conecta-se ao WAL do banco de dados (ex: *Logical Replication Slot* do PostgreSQL) e escuta as mutações.
 4. **Processamento:** Normaliza os dados para o padrão agnóstico ChangeEvent e armazena os LSNs/Offsets localmente para garantir resiliência (*Crash Recovery*).
@@ -37,7 +37,7 @@ O projeto utiliza **Arquitetura Hexagonal (Ports and Adapters)**, isolando compl
 
 ### 2. Configuração do Conector
 
-Crie um arquivo na pasta raiz /connectors/meu-banco.json:
+Os arquivos de exemplo ficam em [`example-connectors/`](example-connectors). Copie o conector desejado para a pasta `/connectors` na raiz do projeto e ajuste os dados de acesso antes de iniciar a aplicação. Por exemplo, crie `/connectors/meu-banco.json`:
 
 ```json
 {
@@ -65,6 +65,10 @@ java -jar target/cdcpublisher-0.0.1-SNAPSHOT.jar
 ```
 
 A aplicação detectará automaticamente o arquivo JSON e inicializará a extração em background.
+
+### Continuidade do Oracle
+
+O conector Oracle persiste o SCN processado no offset local. Se a aplicação for reiniciada e o SCN salvo já tiver sido expurgado dos arquivos necessários ao LogMiner, o erro `ORA-01291` é tratado automaticamente: o conector consulta um SCN válido no servidor, atualiza o offset e retoma a mineração a partir desse ponto. Eventos anteriores ao novo SCN não podem ser recuperados pelo LogMiner e podem exigir uma estratégia de reprocessamento definida pelo operador.
 
 ## Stack Tecnológica
 
