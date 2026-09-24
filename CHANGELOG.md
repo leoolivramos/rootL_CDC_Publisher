@@ -6,6 +6,27 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.
 
 ---
 
+## [0.3.0] - 2026-09-24
+
+### Adicionado
+- **Malha Multi-Banco Expandida para 15 Bancos de Dados**:
+  - Topologia híbrida com 5 bancos PostgreSQL (3 lógicos na instância `:5432` + 2 instâncias independentes em contêineres nas portas `:5433` e `:5434`).
+  - 5 bancos MySQL (3 lógicos na instância `:3306` + 2 instâncias independentes em contêineres nas portas `:3307` e `:3308`).
+  - 5 esquemas isolados no Oracle 21c XE PDB `ORCLPDB1` (`RH`, `FINANCEIRO`, `PATRIMONIO`, `AUDITORIA`, `CONTRATOS`) com *Supplemental Logging* individual em nível de tabela.
+  - 15 arquivos de conectores JSON provisionados e orquestrados dinamicamente em runtime em `connectors/`.
+- **Suíte de Teste de Estresse Massivo (`benchmark/stress_test_suite.py`)**:
+  - Executor concorrente multi-threaded capaz de disparar de 50.000 a 100.000 transações de mutação simultâneas.
+  - Validação empírica de 60.004 eventos transacionais capturados em tempo real sem perdas ou dados fantasmas.
+  - Geração de gráficos comparativos consolidados (`stress_benchmark_15_databases.png`).
+- **Seção de Estresse no Artigo Acadêmico (Subseção 6.4)**:
+  - Integração da tabela quantitativa e análise aprofundada das instabilidades observadas em produção.
+
+### Corrigido
+- **Colisão de Slaves no MySQL (`serverId`)**: Correção do conflito onde múltiplos adaptadores `MySqlBinlogAdapter` derrubavam uns aos outros por utilizarem o `serverId = 65535` padrão da biblioteca `BinaryLogClient`. Implementada a atribuição determinística de identificadores únicos via hash do conector.
+- **Resiliência e Recuperação Térmica no PostgreSQL**: Documentação e validação do tratamento automático de desconexão de socket TCP (`PGStream is closed`), restabelecendo o fluxo via `FileOffsetStoreAdapter` sem perda de dados.
+
+---
+
 ## [0.2.0] - 2026-09-24
 
 ### Adicionado

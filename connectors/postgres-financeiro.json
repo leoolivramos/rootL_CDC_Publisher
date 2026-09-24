@@ -5,7 +5,7 @@
     "jdbcUrl": "jdbc:postgresql://localhost:5432/financeiro?replication=database",
     "user": "cdc_user",
     "password": "cdc_password",
-    "slotName": "cdc_slot",
+    "slotName": "cdc_slot_financeiro",
     "database": "financeiro"
   }
 }

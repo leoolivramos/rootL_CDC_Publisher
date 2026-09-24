@@ -104,6 +104,8 @@ public class MySqlBinlogAdapter implements ChangeLogConnector {
                 executeSnapshotSeNecessario();
 
                 client = new BinaryLogClient(host, port, user, password);
+                long uniqueServerId = (long) (Math.abs(connectorId.hashCode()) % 1000000) + 1000;
+                client.setServerId(uniqueServerId);
 
                 var lastOffset = offsetStore.load(connectorId);
                 if (lastOffset.isPresent()) {

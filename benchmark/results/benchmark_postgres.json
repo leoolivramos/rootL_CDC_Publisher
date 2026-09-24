@@ -1,18 +1,18 @@
 {
   "banco": "POSTGRES",
-  "data_execucao": "2026-09-24T08:35:03.646312",
+  "data_execucao": "2026-09-24T09:42:34.941867",
   "total_operacoes_banco": 250,
   "total_eventos_capturados": 375,
-  "duracao_segundos": 1.104,
-  "vazao_eps": 339.53,
+  "duracao_segundos": 1.058,
+  "vazao_eps": 354.45,
   "latencia_ms": {
-    "min": 2.47,
-    "p50": 3.91,
-    "p90": 5.99,
-    "p95": 7.26,
-    "p99": 17.88,
-    "max": 21.73,
-    "media": 4.45
+    "min": 1.41,
+    "p50": 2.04,
+    "p90": 2.91,
+    "p95": 3.29,
+    "p99": 7.23,
+    "max": 8.8,
+    "media": 2.25
   },
   "operacoes": {
     "INSERT": 250,
