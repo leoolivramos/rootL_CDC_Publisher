@@ -1,0 +1,14 @@
+CREATE USER IF NOT EXISTS 'cdc_user'@'%' IDENTIFIED BY 'cdc_password';
+GRANT REPLICATION CLIENT, REPLICATION SLAVE, RELOAD ON *.* TO 'cdc_user'@'%';
+GRANT SELECT ON financeiro.* TO 'cdc_user'@'%';
+FLUSH PRIVILEGES;
+
+USE financeiro;
+CREATE TABLE IF NOT EXISTS contratos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    numero VARCHAR(50) NOT NULL,
+    valor DECIMAL(15, 2) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO contratos (numero, valor, status) VALUES ('CTR-2026/001', 150000.00, 'ATIVO');

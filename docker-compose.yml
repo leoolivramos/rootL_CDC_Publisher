@@ -17,7 +17,7 @@ services:
       - "-c"
       - "max_wal_senders=4"
     volumes:
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d financeiro"]
       interval: 5s
@@ -36,6 +36,11 @@ services:
       - "3306:3306"
     command:
       --default-authentication-plugin=mysql_native_password
+      --server-id=1
+      --binlog-format=ROW
+      --binlog-row-image=FULL
+    volumes:
+      - ./init-mysql.sql:/docker-entrypoint-initdb.d/init-mysql.sql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 5s
