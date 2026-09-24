@@ -34,3 +34,14 @@ build/
 
 .env
 /offsets
+
+### LaTeX ###
+artigo_latex/*.aux
+artigo_latex/*.log
+artigo_latex/*.out
+artigo_latex/*.bbl
+artigo_latex/*.blg
+artigo_latex/*.synctex.gz
+artigo_latex/*.toc
+artigo_latex/*.fls
+artigo_latex/*.fdb_latexmk

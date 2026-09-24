@@ -1,0 +1,8 @@
+I couldn't open file name `C:\Users\01923483102\Documents\modelosparapublicaodeartigos\modelosparapublicaodeartigos\Template_SBC\template-latex\rootl_cdc_publisher.aux'
+bibtex.exe : bibtex: major issue: So far, you have not checked for MiKTeX updates.
+No linha:1 caractere:227
++ ... ation $dir; & "$($miktex)bibtex.exe" "$dir\rootl_cdc_publisher" > "$d ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (bibtex: major i...MiKTeX updates.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
