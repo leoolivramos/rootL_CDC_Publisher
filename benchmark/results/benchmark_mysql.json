@@ -1,0 +1,22 @@
+{
+  "banco": "MYSQL",
+  "data_execucao": "2026-09-24T08:35:15.625927",
+  "total_operacoes_banco": 250,
+  "total_eventos_capturados": 375,
+  "duracao_segundos": 3.267,
+  "vazao_eps": 114.78,
+  "latencia_ms": {
+    "min": 1.93,
+    "p50": 2.55,
+    "p90": 3.14,
+    "p95": 3.37,
+    "p99": 4.31,
+    "max": 7.79,
+    "media": 2.65
+  },
+  "operacoes": {
+    "INSERT": 250,
+    "UPDATE": 125,
+    "DELETE": 0
+  }
+}

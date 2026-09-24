@@ -1,0 +1,30 @@
+
+% =======================================================================
+% TABELA DE BENCHMARK EXPERIMENTAL GERADA AUTOMATICAMENTE PARA O ARTIGO
+% =======================================================================
+\begin{table}[H]
+\centering
+\caption{Resultados da Avaliação Experimental de Desempenho e Latência do RootL CDC Publisher.}
+\label{tab:benchmark_results}
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Métrica Experimental} & \textbf{PostgreSQL 16 (WAL)} & \textbf{MySQL 8.0 (Binlog)} \\
+\hline
+Eventos Capturados & 375 & 375 \\
+\hline
+Vazão Efetiva (Throughput) & 339.53 EPS & 114.78 EPS \\
+\hline
+Latência Mínima (End-to-End) & 2.47 ms & 1.93 ms \\
+\hline
+Latência Mediana ($p_{50}$) & 3.91 ms & 2.55 ms \\
+\hline
+Latência $p_{90}$ & 5.99 ms & 3.14 ms \\
+\hline
+Latência $p_{95}$ & 7.26 ms & 3.37 ms \\
+\hline
+Latência $p_{99}$ & 17.88 ms & 4.31 ms \\
+\hline
+Latência Média & 4.45 ms & 2.65 ms \\
+\hline
+\end{tabular}
+\end{table}
