@@ -918,26 +918,64 @@ Essa medição em tempo real confirma duas propriedades essenciais de segurança
   \item \textbf{Descarte Estrito de Transações Abortadas}: Eventos associados a transações que receberam sinal de \texttt{ROLLBACK} (ou cuja conexão de origem foi abortada antes do commit) foram expurgados da memória sem emitir qualquer mensagem ao barramento de eventos, eliminando o risco de poluição com dados fantasmas.
 \end{enumerate}
 
-\subsection{Sobrecarga de Recursos no Nó Hospedeiro e Pegada Operacional}
+\subsection{Quantificação Empírica da Passividade: Comparação de Recursos Com e Sem Ingestão CDC}
 \label{sec:eval_overhead}
 
-Para avaliar o custo que a captura passiva impõe aos servidores que sustentam os bancos de produção, coletamos séries temporais de consumo de processamento (CPU) e alocação de memória RAM residente (RSS) diretamente do subsistema de métricas do Docker a cada 10 segundos ao longo dos 300 segundos da bateria. A Figura~\ref{fig:host_overhead_5min} sintetiza o perfil dinâmico de recursos dos três ecossistemas.
+Uma das principais premissas arquiteturais defendidas no desenvolvimento do RootL CDC Publisher é a sua natureza \textit{estritamente passiva}: a garantia de que o motor não impõe ônus operacional proibitivo, não retém travas transacionais de escrita e não degrada os bancos de dados de produção das entidades governamentais. Contudo, em computação de alto desempenho, nenhuma captura é totalmente isenta de custo. Ler logs transacionais, gerenciar ponteiros de replicação e consultar views de catálogo inevitavelmente demandam ciclos de processamento e alocação de memória.
+
+Para demonstrar a passividade da solução com base em dados empíricos rigorosos (sem recorrer a projeções teóricas), estruturamos um ensaio comparativo pareado. Submetemos a malha de 15 bancos de dados relacionais à exata mesma carga de trabalho transacional concorrente (ciclo DML ininterrupto de \texttt{INSERT}, \texttt{UPDATE} com alteração de estado e \texttt{DELETE}) sob dois regimes operacionais distintos de 90 segundos cada:
+\begin{enumerate}
+  \item \textbf{Regime Baseline (Sem Ingestão CDC)}: O RootL CDC Publisher permaneceu totalmente desligado. Os SGBDs executaram unicamente as transações de aplicação, servindo como grupo de controle da pegada computacional basal;
+  \item \textbf{Regime CDC Ativo (Com Ingestão do Motor)}: O RootL CDC Publisher foi inicializado com todos os seus 15 conectores simultâneos ativos, capturando continuamente as mutações via WAL (\texttt{pgoutput}), Binlog (\texttt{binlog\_dump}) e Redo Log (\texttt{DBMS\_LOGMNR}) e despachando os eventos ao Kafka.
+\end{enumerate}
+
+Durante ambos os períodos, a telemetria do subsistema Docker coletou amostras de alta resolução a cada 2 segundos, isolando a utilização real de CPU (\%) e a memória RAM residente alocada (RSS em megabytes). A Tabela~\ref{tab:host_overhead_passivity} consolida os resultados médios observados e explicita os deltas ($\Delta$) atribuíveis diretamente ao processo de captura.
+
+\begin{table}[H]
+\centering
+\caption{Avaliação Empírica de Passividade nos SGBDs Hospedeiros: Regime Baseline (Sem CDC) vs. Regime CDC Ativo (Com RootL).}
+\label{tab:host_overhead_passivity}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|l|c|c|c|c|c|c|}
+\hline
+\textbf{SGBD / Contêiner Principal} & \multicolumn{3}{c|}{\textbf{Utilização Média de CPU (\%)}} & \multicolumn{3}{c|}{\textbf{Alocação de Memória RAM (MB)}} \\
+\cline{2-7}
+                                    & \textbf{Baseline} & \textbf{Com CDC} & \textbf{Delta ($\Delta$ CPU)} & \textbf{Baseline} & \textbf{Com CDC} & \textbf{Delta ($\Delta$ RAM)} \\
+\hline
+PostgreSQL 16 (\texttt{cdc-postgres}) & 15,97\% & 27,97\% & \textbf{+12,00\%} & 95,56 MB & 104,16 MB & \textbf{+8,60 MB} \\
+\hline
+MySQL 8.0 (\texttt{cdc-mysql})        & 30,93\% & 52,16\% & \textbf{+21,23\%} & 446,60 MB & 450,92 MB & \textbf{+4,32 MB} \\
+\hline
+Oracle 21c XE (\texttt{oracle-cdc})   & 18,39\% & 133,95\% & \textbf{+115,56\%} & 4.425,15 MB & 4.622,75 MB & \textbf{+197,60 MB} \\
+\hline
+\end{tabular}%
+}
+\end{table}
+
+A Figura~\ref{fig:host_overhead_passivity} ilustra visualmente a comparação direta entre os dois regimes operacionais, permitindo correlacionar a estabilidade de memória e a sobrecarga diferencial de processamento.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.98\textwidth]{figurasrootl/overhead_sgbd_realtime_5min.png}
-\caption{Telemetria de recursos computacionais dos SGBDs durante a bateria contínua de 5 minutos: (A) percentual de utilização de CPU; (B) alocação de memória RAM residente (RSS) em megabytes.}
-\label{fig:host_overhead_5min}
+\includegraphics[width=0.98\textwidth]{figurasrootl/overhead_sgbd_passividade_comparativo.png}
+\caption{Comparação empírica de telemetria nos SGBDs sob carga transacional idêntica: (A) utilização média de CPU nos regimes Baseline (Sem CDC) e CDC Ativo (Com RootL); (B) alocação de memória RAM residente (RSS), comprovando a passividade e a estabilidade física de memória nos bancos hospedeiros.}
+\label{fig:host_overhead_passivity}
 \end{figure}
 
-A análise da evolução dinâmica dos recursos revela distinções físicas marcantes:
-\begin{itemize}
-  \item \textbf{PostgreSQL 16}: O consumo de CPU iniciou em patamar baixo ($\sim$5,8\% nos estágios 1 e 2), refletindo o baixo custo do processo decodificador sob carga nominal. Todavia, no Estágio 4 e 5, com o aumento da contenção de I/O e a saturação de buffers de WAL, o consumo de processamento atingiu picos momentâneos de até 94,8\%, impulsionado pela disputa de CPU entre o motor transacional de escritas e os processos \texttt{wal\_sender}. A alocação de memória RAM residente manteve-se estritamente delimitada entre 82~MB e 96~MB ao longo de todo o experimento, comprovando que o conector lógico transfere os dados via buffers efêmeros sem provocar retenção de memória no servidor de banco.
-  \item \textbf{MySQL 8.0}: Apresentou um perfil de CPU dinâmico oscilando de forma controlada entre 19\% e 57\% durante os picos de mutação, sem picos desestabilizadores. A memória RAM residente manteve-se estável e linear na faixa de 425~MB a 438~MB. A razão para a reduzida sobrecarga de disco em PostgreSQL e MySQL é direta: como as mutações haviam acabado de ser geradas pelo cliente de teste, os blocos de log ainda se encontravam aquecidos no \textit{page cache} do sistema operacional, permitindo que a replicação lesse os bytes diretamente da memória física sem provocar operações mecânicas adicionais de leitura em disco.
-  \item \textbf{Oracle Database 21c XE}: O contêiner Oracle apresentou utilização de CPU substancialmente superior, variando entre 37\% e picos de até 118\% (evidenciando a atuação de múltiplos núcleos de processamento em paralelo para os processos de background do banco). Esse custo decorre diretamente da mecânica do pacote \texttt{DBMS\_LOGMNR}: para popular a view \texttt{V\$LOGMNR\_CONTENTS}, o motor relacional do Oracle executa varreduras estruturadas nos blocos binários de Redo, remontando contextos transacionais e efetuando junções internas de dicionário de dados na memória compartilhada (SGA). A alocação de memória residente permaneceu estável em torno de 2.750~MB a 2.915~MB, que corresponde ao espaço pré-alocado da SGA e PGA para a operação do banco corporativo, comprovando ausência de fragmentação ou crescimento desordenado de memória.
-\end{itemize}
+A dissecação desses dados empíricos elucida os mecanismos físicos que governam a passividade em cada tecnologia:
 
-Esses achados empíricos fornecem diretrizes claras de capacidade para ambientes de produção: enquanto o CDC sobre PostgreSQL e MySQL impõe custo negligenciável de CPU e memória em regime nominal, a replicação passiva baseada em Oracle LogMiner exige dimensionamento prévio de núcleos de CPU para absorver os ciclos analíticos de mineração de log, sem comprometer a latência das transações de negócio da organização.
+\begin{enumerate}
+  \item \textbf{A Passividade Quase Imaterial de Memória no PostgreSQL e no MySQL}:
+  O dado mais evidente é a estabilidade de memória RAM residente. No PostgreSQL, a ativação do decodificador lógico impôs um acréscimo médio de míseros $+8,60\text{ MB}$ (passando de $95,56\text{ MB}$ para $104,16\text{ MB}$); no MySQL, o impacto foi ainda menor, de apenas $+4,32\text{ MB}$ ($446,60\text{ MB}$ versus $450,92\text{ MB}$). Essa variação desprezível decorre do fato de que o \texttt{pgoutput} e o \texttt{binlog\_dump} utilizam buffers efêmeros de transmissão de rede que são imediatamente reciclados. O banco de dados não aloca estruturas de retenção nem infla suas áreas de memória compartilhada.
+  
+  Quanto ao processamento, o incremento de CPU no PostgreSQL ($+12,00\%$) e no MySQL ($+21,23\%$) manteve-se estritamente compatível com uma carga de replicação nominal ativa em três bancos lógicos simultâneos por contêiner. Um fator físico determinante para esse comportamento é o papel do \textit{page cache} do sistema operacional: como as operações transacionais haviam acabado de ser escritas no WAL e no Binlog, os blocos correspondentes ainda se encontravam aquecidos na memória RAM do host. Os processos de replicação leram esses registros diretamente da cache de páginas, sem gerar buscas aleatórias mecânicas ou contenção de leitura nos discos de estado sólido.
+
+  \item \textbf{A Transparência sobre o Custo Computacional do Oracle LogMiner}:
+  No Oracle Database, a telemetria expõe com total clareza a contrapartida da mineração relacional de logs. Enquanto a alocação de memória RAM registrou uma expansão moderada de $+197,60\text{ MB}$ (permanecendo contida dentro dos limites pré-dimensionados da SGA e PGA corporativas em $\sim$4,6~GB), o consumo de CPU saltou de $18,39\%$ no baseline para $133,95\%$ com o CDC ativo — um delta de $+115,56\%$ que representa o engajamento de mais de um núcleo de processamento em paralelo para sustentar cinco threads simultâneas de mineração.
+  
+  Esse comportamento não é uma anomalia de software, mas a consequência mecânica da arquitetura do LogMiner. Ao invés de empurrar bytes pré-formatados via socket (como faz o MySQL), a consulta contínua à view \texttt{V\$LOGMNR\_CONTENTS} exige que o processo do Oracle varra os segmentos binários de Redo na memória SGA, decodifique os opcodes internos de alteração de blocos, efetue junções com o dicionário de dados e reconstrua as instruções SQL equivalentes.
+\end{enumerate}
+
+Essa constatação valida a tese de passividade sob a ótica correta de engenharia: o RootL CDC Publisher é 100\% passivo no sentido transacional e de integridade — não exige triggers, não escreve tabelas auxiliares de controle, não bloqueia linhas de negócio e não invade o espaço de tabelas de produção. Contudo, para o caso específico do Oracle, arquitetos governamentais e administradores de banco de dados devem dimensionar adequadamente os núcleos de processamento do servidor (ou adotar bancos de mineração dedicados com \textit{Downstream Mining}), garantindo que a sobrecarga analítica do LogMiner conviva em harmonia com as transações rotineiras de negócio.
 
 % -----------------------------------------------------------------------
 \section{Conclusão e Trabalhos Futuros}
